@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <style>
+      * {
+        text-align: center;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f0f0f0;
+        margin: 0;
+        padding: 0;
+      }
+
+      h1 {
+        color: #333;
+      }
+
+      #controls {
+        margin: 20px;
+      }
+
+      #board {
+        margin-left: auto;
+        margin-right: auto;
+        border-spacing: 0;
+      }
+
+      #board tr td {
+        border: 1px solid #ccc;
+        background: #34da79;
+        width: 30px;
+        height: 30px;
+        text-align: center;
+        cursor: pointer;
+        font-size: 20px;
+        font-weight: bold;
+        color: #333;
+      }
+
+      #board tr td.clicked {
+        background: #6c5ee7;
+        color: white;
+      }
+
+      #board tr td.mine {
+        background: #ff0000;
+      }
+
+      #board tr td.flag {
+        background: #ffff00;
+      }
+
+      #board tr td.hint {
+        background: #4caf50;
+      }
+
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        font-size: 16px;
+        cursor: pointer;
+        border: none;
+        background-color: #6c5ee7;
+        color: white;
+        border-radius: 5px;
+      }
+
+      button:hover {
+        background-color: #5a4cc8;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>지뢰찾기</h1>
+    <div id="controls">
+      난이도:
+      <select id="difficulty">
+        <option value="easy">쉬움</option>
+        <option value="medium">중간</option>
+        <option value="hard">어려움</option>
+      </select>
+      <button onclick="genGrid();">새로운 게임</button>
+      <button onclick="giveHint();">힌트</button>
+    </div>
+    <div>타이머: <span id="timer">0</span>초</div>
+    <div>최고 기록: <span id="bestTime">N/A</span></div>
+    <div>남은 지뢰: <span id="minesCount"></span></div>
+    <table id="board"></table>
+    <script>
+      let grid = document.getElementById('board');
+      let timer = document.getElementById('timer');
+      let bestTimeDisplay = document.getElementById('bestTime');
+      let minesCountDisplay = document.getElementById('minesCount');
+      let timerInterval;
+      let mineCount;
+      let hintUsed = false;
+      let bestTime = localStorage.getItem('bestTime')
+        ? parseInt(localStorage.getItem('bestTime'))
+        : null;
+
+      if (bestTime !== null) {
+        bestTimeDisplay.innerText = bestTime + '초';
+      }
+
+      function startTimer() {
+        let time = 0;
+        timerInterval = setInterval(() => {
+          time++;
+          timer.innerText = time;
+        }, 1000);
+      }
+
+      function stopTimer() {
+        clearInterval(timerInterval);
+      }
+
+      function genGrid() {
+        stopTimer();
+        timer.innerText = '0';
+        startTimer();
+        grid.innerHTML = '';
+        hintUsed = false;
+        let difficulty = document.getElementById('difficulty').value;
+        let rows, cols, mines;
+
+        if (difficulty === 'easy') {
+          rows = cols = 8;
+          mines = 10;
+        } else if (difficulty === 'medium') {
+          rows = cols = 16;
+          mines = 40;
+        } else if (difficulty === 'hard') {
+          rows = 16;
+          cols = 30;
+          mines = 99;
+        }
+
+        mineCount = mines;
+        minesCountDisplay.innerText = mineCount;
+
+        let minePositions = generateMines(rows, cols, mines);
+
+        for (let i = 0; i < rows; i++) {
+          let row = grid.insertRow(i);
+          for (let j = 0; j < cols; j++) {
+            let cell = row.insertCell(j);
+            cell.onclick = function () {
+              clickBox(this);
+            };
+            cell.oncontextmenu = function (e) {
+              e.preventDefault();
+              placeFlag(this);
+            };
+            cell.setAttribute('mine', minePositions[i][j]);
+            cell.setAttribute('data-row', i);
+            cell.setAttribute('data-col', j);
+          }
+        }
+      }
+
+      function generateMines(rows, cols, mines) {
+        let minePositions = Array.from({ length: rows }, () =>
+          Array(cols).fill('false')
+        );
+        while (mines > 0) {
+          let row = Math.floor(Math.random() * rows);
+          let col = Math.floor(Math.random() * cols);
+          if (minePositions[row][col] === 'false') {
+            minePositions[row][col] = 'true';
+            mines--;
+          }
+        }
+        return minePositions;
+      }
+
+      function clickBox(cell) {
+        if (cell.getAttribute('mine') === 'true') {
+          cell.className = 'mine';
+          alert('게임이 종료되었습니다.');
+          stopTimer();
+          checkBestTime();
+        } else {
+          cell.className = 'clicked';
+          let row = parseInt(cell.getAttribute('data-row'));
+          let col = parseInt(cell.getAttribute('data-col'));
+          let minesCount = countAdjacentMines(row, col);
+          if (minesCount > 0) {
+            cell.innerText = minesCount;
+          }
+          checkWin();
+        }
+      }
+
+      function countAdjacentMines(row, col) {
+        let minesCount = 0;
+        for (let i = row - 1; i <= row + 1; i++) {
+          for (let j = col - 1; j <= col + 1; j++) {
+            if (
+              i >= 0 &&
+              i < grid.rows.length &&
+              j >= 0 &&
+              j < grid.rows[0].cells.length
+            ) {
+              if (grid.rows[i].cells[j].getAttribute('mine') === 'true') {
+                minesCount++;
+              }
+            }
+          }
+        }
+        return minesCount;
+      }
+
+      function placeFlag(cell) {
+        if (cell.className === 'flag') {
+          cell.className = '';
+          mineCount++;
+        } else if (cell.className === '') {
+          cell.className = 'flag';
+          mineCount--;
+        }
+        minesCountDisplay.innerText = mineCount;
+        checkWin();
+      }
+
+      function checkWin() {
+        let cells = grid.getElementsByTagName('td');
+        let allClicked = true;
+        for (let cell of cells) {
+          if (
+            cell.getAttribute('mine') === 'false' &&
+            cell.className !== 'clicked'
+          ) {
+            allClicked = false;
+            break;
+          }
+        }
+        if (allClicked) {
+          alert('축하합니다! 승리했습니다!');
+          stopTimer();
+          checkBestTime();
+        }
+      }
+
+      function giveHint() {
+        if (hintUsed) {
+          alert('힌트는 한 번만 사용할 수 있습니다.');
+          return;
+        }
+        let cells = grid.getElementsByTagName('td');
+        for (let cell of cells) {
+          if (cell.getAttribute('mine') === 'false' && cell.className === '') {
+            cell.className = 'hint';
+            hintUsed = true;
+            break;
+          }
+        }
+      }
+
+      function checkBestTime() {
+        let currentTime = parseInt(timer.innerText);
+        if (bestTime === null || currentTime < bestTime) {
+          bestTime = currentTime;
+          bestTimeDisplay.innerText = bestTime + '초';
+          localStorage.setItem('bestTime', bestTime);
+          alert('새로운 최고 기록입니다!');
+        }
+      }
+
+      genGrid();
+    </script>
+  </body>
+</html>
